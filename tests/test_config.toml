@@ -1,0 +1,5 @@
+[process]
+fullscreen = true
+
+[time_limits]
+game_loops = 1234
