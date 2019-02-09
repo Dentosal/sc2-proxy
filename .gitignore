@@ -1,2 +1,6 @@
+# Rust files
 /target
 **/*.rs.bk
+
+# Default config
+/sc2_proxy.toml

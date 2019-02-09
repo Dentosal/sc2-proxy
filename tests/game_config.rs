@@ -1,4 +1,4 @@
-use sc2_proxy::config::Config;
+use sc2_proxy::config::*;
 
 use std::fs::File;
 use std::io::prelude::*;
@@ -16,5 +16,6 @@ fn test_load_game_config() {
 
     assert_eq!(config.process.fullscreen, true);
     assert_eq!(config.process.verbose, true);
-    assert_eq!(config.time_limits.game_loops, Some(1234));
+    assert_eq!(config.matchmaking.mode, MatchmakingMode::Pairs);
+    assert_eq!(config.match_defaults.time_limits.game_loops, Some(1234));
 }

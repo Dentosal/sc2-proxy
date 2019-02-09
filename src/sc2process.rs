@@ -6,7 +6,7 @@ use std::process::{Child, Command, Stdio};
 use std::thread::sleep;
 use std::time::Duration;
 
-use log::{debug, warn};
+use log::{debug, info, warn};
 
 use portpicker::pick_unused_port;
 use serde::{Deserialize, Serialize};
@@ -67,6 +67,8 @@ impl Process {
         let ws_port = pick_unused_port().expect("Could not find a free port");
         let tempdir = TempDir::new().expect("Could not create temp dir");
 
+        debug!("Starting a new SC2 process");
+
         let process = options
             .apply(
                 Command::new(paths::executable())
@@ -123,8 +125,15 @@ impl Process {
         None
     }
 
+    /// Wait for the process to exit
+    pub fn wait(&mut self) {
+        info!("Waiting for the sc2 process to exit");
+        self.process.kill().expect("SC2 process was not running");
+    }
+
     /// Kill the process
     pub fn kill(&mut self) {
-        self.process.kill().expect("Could not kill SC2 process")
+        info!("Killing the sc2 process");
+        self.process.kill().expect("Could not kill SC2 process");
     }
 }

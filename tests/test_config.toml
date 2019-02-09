@@ -1,5 +1,11 @@
 [process]
 fullscreen = true
 
-[time_limits]
+[matchmaking]
+mode = "Pairs"
+
+[match_defaults.time_limits]
 game_loops = 1234
+
+[match_defaults.record_results]
+end_score = true
