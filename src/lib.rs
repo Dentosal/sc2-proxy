@@ -28,34 +28,40 @@ pub mod supervisor;
 use self::config::Config;
 use self::supervisor::{RemoteUpdateStatus, Supervisor};
 
-/// Load configuration
-/// Panics uses default if not successful
-pub fn load_config() -> Config {
+/// Default config file path
+pub fn default_config_path() -> String {
     let env_cfg = var("SC2_PROXY_CONFIG").unwrap_or(String::new());
-    let path = if env_cfg != "" {
+    if env_cfg != "" {
         env_cfg
     } else {
-        "sc2_proxy.toml".to_string()
-    };
+        "sc2_proxy.toml".to_owned()
+    }
+}
 
+/// Load configuration from a path
+/// Returns none if the file doesn't exist
+/// Panics if file cannot be read or format is invalid
+pub fn load_config(path: String) -> Option<Config> {
     info!("Reading config file from {:?}", path);
     match File::open(path) {
         Ok(ref mut f) => {
             let mut contents = String::new();
             f.read_to_string(&mut contents)
                 .expect("Unable to read config file");
-            toml::from_str::<Config>(&contents).expect("Deserialization failed")
+            Some(toml::from_str::<Config>(&contents).expect("Deserialization failed"))
         },
-        Err(_) => {
-            warn!("Config file not found, using default config");
-            Config::new()
-        },
+        Err(_) => None,
     }
 }
 
 /// Run a proxy server, loading the config any available
-pub fn run_server() {
-    run_server_config(load_config())
+pub fn run_server(config_path: Option<String>) {
+    let path = config_path.unwrap_or_else(|| default_config_path());
+    let config = load_config(path).unwrap_or_else(|| {
+        warn!("Config file not found, using default config");
+        Config::new()
+    });
+    run_server_config(config)
 }
 
 /// Run a proxy server using `config`
