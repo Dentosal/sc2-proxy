@@ -4,6 +4,8 @@ mod request_limits;
 
 use serde::{Deserialize, Serialize};
 
+use crate::maps::find_map;
+
 pub use crate::sc2::{BuiltinAI, Difficulty, Race};
 pub use crate::sc2process::ProcessOptions;
 
@@ -25,6 +27,23 @@ impl Config {
     /// New default config
     pub fn new() -> Self {
         Self { ..Default::default() }
+    }
+
+    /// Checks if the config is valid for use, and returns possible error
+    /// Checked before creating a lobby, as in that point it cannot anymore
+    /// be changed by the remote controller
+    pub fn check(&self) -> Result<(), String> {
+        // Check that map is defined and exists
+        find_map(
+            self.match_defaults
+                .game
+                .map_name
+                .clone()
+                .ok_or("Missing map name".to_owned())?,
+        )
+        .ok_or("Map not found".to_owned())?;
+
+        Ok(())
     }
 }
 

@@ -58,11 +58,17 @@ impl GameLobby {
         use sc2_proto::sc2api::{LocalMap, Request, RequestCreateGame};
 
         let mut r_local_map = LocalMap::new();
-        if let Some(map_name) = self.config.match_defaults.game.map_name.clone() {
-            r_local_map.set_map_path(find_map(map_name).expect("Map not found"));
-        } else {
-            panic!("Map name missing from config");
-        }
+        r_local_map.set_map_path(
+            find_map(
+                self.config
+                    .match_defaults
+                    .game
+                    .map_name
+                    .clone()
+                    .expect("Missing map_name (Config::check?)"),
+            )
+            .expect("Map not found (Config::check?)"),
+        );
 
         let mut r_create_game = RequestCreateGame::new();
         r_create_game.set_local_map(r_local_map);

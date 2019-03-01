@@ -6,8 +6,9 @@ use crate::paths::map_dir;
 
 /// Find a map file, returning its relative path to the sc2 map directory
 pub fn find_map(mut name: String) -> Option<String> {
+    name = name.replace(" ", "");
     if !name.ends_with(".SC2Map") {
-        name.push_str(".SC2Map")
+        name.push_str(".SC2Map");
     }
 
     let mapdir = map_dir();

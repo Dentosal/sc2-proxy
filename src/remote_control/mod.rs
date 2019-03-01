@@ -54,7 +54,7 @@ fn process_line(
     loop {
         let mut line = String::new();
         let mut updates: Vec<Update> = Vec::new();
-        stream.read_line(&mut line).expect("Could not read");
+        stream.read_line(&mut line)?;
 
         match serde_json::from_str::<Request>(&line) {
             Ok(req) => {

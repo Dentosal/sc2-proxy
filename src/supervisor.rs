@@ -74,6 +74,11 @@ impl Supervisor {
 
     /// Create new lobby
     fn create_lobby(&mut self) -> GameId {
+        if let Err(e) = self.config.check() {
+            error!("Invalid configuration: {}", e);
+            panic!("Invalid configuration");
+        }
+
         let lobby = GameLobby::new(self.config.clone());
         let id = self.id_counter;
         debug_assert!(!self.lobbies.contains_key(&id));
