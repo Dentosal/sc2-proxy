@@ -8,7 +8,7 @@ use websocket::result::WebSocketError;
 use websocket::OwnedMessage;
 
 use protobuf::parse_from_bytes;
-use protobuf::Message;
+use protobuf::{Message, RepeatedField};
 use sc2_proto::sc2api::{Request, RequestJoinGame, Response, Status};
 
 use crate::config::Config;
@@ -155,8 +155,9 @@ impl Player {
         while let Some(req) = self.client_get_request() {
             if !config.match_defaults.request_limits.is_request_allowed(&req) {
                 warn!("AC: Request denied");
-                // TODO
-                unimplemented!();
+                let mut response = Response::new();
+                response.set_error(RepeatedField::from_vec(vec!["Proxy: Request denied".to_owned()]));
+                self.client_respond(response.clone());
             }
 
             let response = match self.sc2_query(req) {
@@ -170,6 +171,9 @@ impl Player {
                 },
             };
             self.sc2_status = Some(response.get_status());
+
+            // TODO: request refining, e.g. pathing gird fix
+
             self.client_respond(response.clone());
 
             if response.has_quit() {
