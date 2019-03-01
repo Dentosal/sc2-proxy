@@ -4,3 +4,6 @@
 
 # Default config
 /sc2_proxy.toml
+
+# Misc
+/test_*.py

@@ -1,5 +1,21 @@
 # SC2-Proxy, StarCraft II bot API management layer
 
+## Usage
+
+First, you need to have StarCraft II installed, or in the Linux case, the binaries must be downloaded. Map files are required as well.
+
+Then a configuration file is required the proxy a bit, so create a file called `sc2_proxy.toml` with the following contents:
+
+```toml
+[match_defaults.game]
+map_name = "Automaton LE"
+```
+
+If you just want to test, use `cargo run` to launch. Then connect two bots to address `127.0.0.1:8642`, both using only the join_game command. Setting env variable `RUST_LOG` to `sc2_proxy=info` would be smart as well, as otherwise even the game result is not logged.
+
+For any real-world usage you most likely want to `cargo build --release`. and then use `./target/release/sc2-proxy` (or `target/release/sc2-proxy.exe` on Windows). This is much faster.
+
+
 ## Features
 * Starts one or more SC2 processes
     * Manages port configurations
@@ -12,6 +28,7 @@
     * Off-band requests and data
 
 ## Future Goals
+* Automatically saving replays
 * SC2 process pooling
     * Reuse processes
     * Prelanuch on startup?
