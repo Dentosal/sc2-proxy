@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use sc2_proto::sc2api::Request;
 
 /// Incoming request access control
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq)]
 pub struct RequestLimits {
     #[serde(default)]
     pub disable_cheats: bool,

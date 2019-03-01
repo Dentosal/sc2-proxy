@@ -6,14 +6,15 @@ mod lobby;
 mod messaging;
 mod player;
 
+use crossbeam::channel::{self, Receiver, Sender, TryRecvError};
 use std::any::Any;
-use std::sync::mpsc::{channel, Receiver, TryRecvError};
 use std::thread;
 
 use self::player::Player;
 
 pub use self::game::{Game, GameResult};
 pub use self::lobby::GameLobby;
+pub use self::messaging::{FromSupervisor, ToSupervisor};
 
 fn any_panic_to_string(panic_msg: Box<Any>) -> String {
     panic_msg
@@ -27,15 +28,25 @@ pub struct Handle {
     /// Handle for the game thread
     handle: thread::JoinHandle<Vec<Player>>,
     /// Result connection receiver
-    rx: Receiver<GameResult>,
+    result_rx: Receiver<GameResult>,
+    /// Message connection sender
+    msg_tx: Sender<FromSupervisor>,
+    /// Message connection receiver
+    _msg_rx: Receiver<ToSupervisor>,
     /// Result or error, if the game is over
     /// Updated by `poll`
     result: Option<Result<GameResult, ()>>,
 }
 impl Handle {
+    /// Send message to the game
+    /// Panics if the game is not running, i.e. the channel is disconnected
+    pub fn send(&mut self, msg: FromSupervisor) {
+        self.msg_tx.send(msg).expect("Could not send");
+    }
+
     /// Checks if the game is over
     pub fn check(&mut self) -> bool {
-        match self.rx.try_recv() {
+        match self.result_rx.try_recv() {
             Err(TryRecvError::Empty) => false,
             Ok(result) => {
                 self.result = Some(Ok(result));
@@ -71,13 +82,17 @@ impl Handle {
 
 /// Run game in a thread, returning handle
 pub fn spawn(game: Game) -> Handle {
-    let (tx, rx) = channel::<GameResult>();
+    let (result_tx, result_rx) = channel::unbounded::<GameResult>();
+    let (fr_msg_tx, fr_msg_rx) = channel::unbounded::<FromSupervisor>();
+    let (to_msg_tx, to_msg_rx) = channel::unbounded::<ToSupervisor>();
 
-    let handle = thread::spawn(move || game.run(tx));
+    let handle = thread::spawn(move || game.run(result_tx, fr_msg_rx, to_msg_tx));
 
     Handle {
         handle,
-        rx,
+        result_rx,
+        msg_tx: fr_msg_tx,
+        _msg_rx: to_msg_rx,
         result: None,
     }
 }

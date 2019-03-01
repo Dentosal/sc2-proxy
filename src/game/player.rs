@@ -1,8 +1,8 @@
 //! Bot player participant
 
-use log::{debug, trace, warn};
+use log::{debug, error, trace, warn};
 use std::fmt;
-use std::io::ErrorKind::ConnectionReset;
+use std::io::ErrorKind::{ConnectionAborted, ConnectionReset};
 
 use websocket::result::WebSocketError;
 use websocket::OwnedMessage;
@@ -65,6 +65,7 @@ impl Player {
 
     /// Receive a message from the client
     /// Returns None if the connection is already closed
+    #[must_use]
     fn client_recv(&mut self) -> Option<OwnedMessage> {
         trace!("Waiting for a message from the client");
         match self.connection.recv_message() {
@@ -75,14 +76,21 @@ impl Player {
             Err(WebSocketError::NoDataAvailable) => {
                 warn!(
                     "Client {:?} closed connection unexpectedly (ws disconnect)",
-                    self.connection.peer_addr().unwrap()
+                    self.connection.peer_addr().expect("PeerAddr")
                 );
                 None
             },
             Err(WebSocketError::IoError(ref e)) if e.kind() == ConnectionReset => {
                 warn!(
                     "Client {:?} closed connection unexpectedly (connection reset)",
-                    self.connection.peer_addr().unwrap()
+                    self.connection.peer_addr().expect("PeerAddr")
+                );
+                None
+            },
+            Err(WebSocketError::IoError(ref e)) if e.kind() == ConnectionAborted => {
+                warn!(
+                    "Client {:?} closed connection unexpectedly (connection abort)",
+                    self.connection.peer_addr().expect("PeerAddr")
                 );
                 None
             },
@@ -92,6 +100,7 @@ impl Player {
 
     /// Get a protobuf request from the client
     /// Returns None if the connection is already closed
+    #[must_use]
     pub fn client_get_request(&mut self) -> Option<Request> {
         match self.client_recv()? {
             OwnedMessage::Binary(bytes) => {
@@ -99,56 +108,79 @@ impl Player {
                 trace!("Request from the client: {:?}", resp);
                 Some(resp)
             },
+            OwnedMessage::Close(_) => None,
             other => panic!("Expected binary message, got {:?}", other),
         }
     }
 
     /// Send message to sc2
-    fn sc2_send(&mut self, msg: &OwnedMessage) {
-        self.sc2_ws.send_message(msg).expect("Could not send");
+    /// Returns None if the connection is already closed
+    #[must_use]
+    fn sc2_send(&mut self, msg: &OwnedMessage) -> Option<()> {
+        self.sc2_ws.send_message(msg).ok()
     }
 
     /// Send protobuf request to sc2
-    pub fn sc2_request(&mut self, r: Request) {
+    /// Returns None if the connection is already closed
+    #[must_use]
+    pub fn sc2_request(&mut self, r: Request) -> Option<()> {
         self.sc2_send(&OwnedMessage::Binary(
             r.write_to_bytes().expect("Invalid protobuf message"),
-        ));
+        ))
     }
 
     /// Wait and receive a protobuf request from sc2
-    pub fn sc2_recv(&mut self) -> Response {
-        match self.sc2_ws.recv_message().expect("Could not receive") {
-            OwnedMessage::Binary(bytes) => parse_from_bytes::<Response>(&bytes).expect("Unable to receive"),
+    /// Returns None if the connection is already closed
+    #[must_use]
+    pub fn sc2_recv(&mut self) -> Option<Response> {
+        match self.sc2_ws.recv_message().ok()? {
+            OwnedMessage::Binary(bytes) => Some(parse_from_bytes::<Response>(&bytes).expect("Invalid data")),
+            OwnedMessage::Close(_) => None,
             other => panic!("Expected binary message, got {:?}", other),
         }
     }
 
     /// Send a request to SC2 and return the reponse
-    pub fn sc2_query(&mut self, r: Request) -> Response {
-        self.sc2_request(r);
+    /// Returns None if the connection is already closed
+    #[must_use]
+    pub fn sc2_query(&mut self, r: Request) -> Option<Response> {
+        self.sc2_request(r)?;
         self.sc2_recv()
     }
 
     /// Run game communication loop
     /// Returns self it iff not disconnected, so that it can be returned to the playlist
+    #[must_use]
     pub fn run(mut self, config: Config, mut gamec: ChannelToGame) -> Option<Self> {
         while let Some(req) = self.client_get_request() {
             if !config.match_defaults.request_limits.is_request_allowed(&req) {
                 warn!("AC: Request denied");
+                // TODO
+                unimplemented!();
             }
 
-            let response = self.sc2_query(req);
+            let response = match self.sc2_query(req) {
+                Some(d) => d,
+                None => {
+                    error!("SC2 unexpectedly closed the connection");
+                    gamec.send(ToGameContent::SC2UnexpectedConnectionClose);
+                    debug!("Killing the process");
+                    self.process.kill();
+                    return None;
+                },
+            };
             self.sc2_status = Some(response.get_status());
             self.client_respond(response.clone());
 
             if response.has_quit() {
-                gamec.send(ToGameContent::QuitBeforeLeave);
                 debug!("SC2 is shutting down");
+                gamec.send(ToGameContent::QuitBeforeLeave);
+                debug!("Waiting for the process");
                 self.process.wait();
                 return None;
             } else if response.has_leave_game() {
-                gamec.send(ToGameContent::LeftGame);
                 debug!("Client left the game");
+                gamec.send(ToGameContent::LeftGame);
                 return Some(self);
             } else if response.has_observation() {
                 let obs = response.get_observation();
@@ -169,7 +201,7 @@ impl Player {
             if let Some(msg) = gamec.recv() {
                 match msg {
                     ToPlayer::Quit => {
-                        debug!("Killing process by request from the game");
+                        debug!("Killing the process by request from the game");
                         self.process.kill();
                         return None;
                     },

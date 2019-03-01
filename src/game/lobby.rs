@@ -34,6 +34,11 @@ impl GameLobby {
         }
     }
 
+    /// Checks if this lobby has any player participants
+    pub fn is_valid(&self) -> bool {
+        !self.players.is_empty()
+    }
+
     /// Add a new client to the game
     pub fn join(&mut self, connection: Client, join_req: RequestJoinGame) {
         self.players.push(Player::new(
@@ -76,7 +81,9 @@ impl GameLobby {
     }
 
     /// Create the game using the first client
-    pub fn create_game(&mut self) {
+    /// Returns None iff game join fails (connection close or sc2 process close)
+    #[must_use]
+    pub fn create_game(&mut self) -> Option<()> {
         assert!(self.players.len() > 0);
 
         // Craft CrateGame request
@@ -97,16 +104,18 @@ impl GameLobby {
 
         // Send CreateGame request to first process
         let proto = self.proto_create_game(player_configs);
-        let response = self.players[0].sc2_query(proto);
+        let response = self.players[0].sc2_query(proto)?;
 
         assert!(response.has_create_game());
         let resp_create_game = response.get_create_game();
         if resp_create_game.has_error() {
             error!("Could not create game: {:?}", resp_create_game.get_error());
-            unimplemented!("What should we do here?");
+            return None;
         } else {
             debug!("Game created succesfully");
         }
+
+        Some(())
     }
 
     /// Protobuf to join a game
@@ -129,7 +138,9 @@ impl GameLobby {
     }
 
     /// Joins all participants to games
-    pub fn join_all_game(&mut self) {
+    /// Returns None iff game join fails (connection close or sc2 process close)
+    #[must_use]
+    pub fn join_all_game(&mut self) -> Option<()> {
         let pc = PortConfig::new().expect("Unable to find free ports");
 
         let protos: Vec<_> = self
@@ -139,16 +150,16 @@ impl GameLobby {
             .collect();
 
         for (player, proto) in self.players.iter_mut().zip(protos) {
-            player.sc2_request(proto);
+            player.sc2_request(proto)?;
         }
 
         for player in self.players.iter_mut() {
-            let response = player.sc2_recv();
+            let response = player.sc2_recv()?;
             assert!(response.has_join_game());
             let resp_join_game = response.get_join_game();
             if resp_join_game.has_error() {
                 error!("Could not join game: {:?}", resp_join_game.get_error());
-                unimplemented!("What should we do here?");
+                return None;
             } else {
                 debug!("Game join succesful");
             }
@@ -159,17 +170,25 @@ impl GameLobby {
 
         // TODO: Human players?
         // TODO: Observers?
+
+        Some(())
     }
 
     /// Start the game, and send responses to join requests
-    pub fn start(mut self) -> Game {
-        self.create_game();
-        self.join_all_game();
-        Game {
+    /// Returns None iff game create or join fails (connection close or sc2 process close)
+    /// In that case, the connections are dropped (closed).
+    #[must_use]
+    pub fn start(mut self) -> Option<Game> {
+        self.create_game()?;
+        self.join_all_game()?;
+        Some(Game {
             config: self.config,
             players: self.players,
-        }
+        })
     }
+
+    /// Destroy the lobby, closing all the connections
+    pub fn close(self) {}
 }
 
 /// Used to pass player setup info to CreateGame

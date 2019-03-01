@@ -1,8 +1,8 @@
 //! Proxy WebSocket receiver
 
+use crossbeam::channel::Sender;
 use log::debug;
 use std::net::ToSocketAddrs;
-use std::sync::mpsc::Sender;
 
 use websocket::client::sync::Client as GenericClient;
 use websocket::server::sync::Server as GenericServer;
@@ -25,8 +25,9 @@ pub fn run<A: ToSocketAddrs>(addr: A, channel_out: Sender<Client>) -> ! {
 
     loop {
         debug!("Waiting for connection");
-        let conn = get_connection(&mut server).expect("Could not get connection");
-        debug!("Connection accepted: {:?}", conn.peer_addr().unwrap());
-        channel_out.send(conn).expect("Send failed");
+        if let Some(conn) = get_connection(&mut server) {
+            debug!("Connection accepted: {:?}", conn.peer_addr().unwrap());
+            channel_out.send(conn).expect("Send failed");
+        }
     }
 }

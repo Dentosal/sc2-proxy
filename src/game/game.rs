@@ -1,20 +1,30 @@
 //! Game manages a single game, including configuration and result gathering
 
+use crossbeam::channel::{select, Receiver, Sender};
 use log::{debug, warn};
-use std::sync::mpsc::Sender;
 use std::thread;
 
 use crate::config::Config;
 use crate::sc2::PlayerResult;
 
 use super::any_panic_to_string;
-use super::messaging::{create_channels, ToGame, ToGameContent};
+use super::messaging::{create_channels, FromSupervisor, ToGame, ToGameContent, ToSupervisor};
 use super::player::Player;
 
 /// Game result data
 #[derive(Debug, Clone)]
 pub struct GameResult {
+    pub end_reason: GameEndReason,
     pub player_results: Vec<PlayerResult>,
+}
+
+/// Why this game ended
+#[derive(Debug, Clone)]
+pub enum GameEndReason {
+    /// Game ended naturally
+    Normal,
+    /// Supervisor requested game quit
+    QuitRequest,
 }
 
 /// A running game
@@ -26,9 +36,40 @@ pub struct Game {
     pub(super) players: Vec<Player>,
 }
 impl Game {
+    /// Process a messsage from player thread
+    fn process_msg(msg: ToGame, player_results: &mut Vec<Option<PlayerResult>>) {
+        let ToGame {
+            player_index,
+            content,
+        } = msg;
+        match content {
+            ToGameContent::GameOver(results) => {
+                player_results.splice(.., results.into_iter().map(Some));
+            },
+            ToGameContent::LeftGame => {
+                debug!("Player left game before it was over");
+                player_results[player_index] = Some(PlayerResult::Defeat);
+            },
+            ToGameContent::QuitBeforeLeave => {
+                warn!("Client quit without leaving the game");
+                player_results[player_index] = Some(PlayerResult::Defeat);
+            },
+            ToGameContent::SC2UnexpectedConnectionClose => {
+                warn!("SC2 process closed connection unexpectedly");
+                player_results[player_index] = Some(PlayerResult::Defeat);
+            },
+            ToGameContent::UnexpectedConnectionClose => {
+                warn!("Unexpected connection close");
+                player_results[player_index] = Some(PlayerResult::Defeat);
+            },
+        }
+    }
+
     /// Run the game, spawns thread for each participant player
     /// Returns the non-disconnected player instances, so they can be returned to the playlist
-    pub fn run(self, result_tx: Sender<GameResult>) -> Vec<Player> {
+    pub fn run(
+        self, result_tx: Sender<GameResult>, from_sv: Receiver<FromSupervisor>, _to_sv: Sender<ToSupervisor>,
+    ) -> Vec<Player> {
         let mut handles: Vec<thread::JoinHandle<Option<Player>>> = Vec::new();
 
         let (rx, mut _to_player_channels, player_channels) = create_channels(self.players.len());
@@ -42,41 +83,32 @@ impl Game {
         }
 
         while player_results.contains(&None) {
-            // Wait for any client to end the game
-            let ToGame {
-                player_index,
-                content,
-            } = rx.recv().unwrap();
+            select! {
+                // A client ended the game
+                recv(rx) -> r => match r {
+                    Ok(msg) => Self::process_msg(msg, &mut player_results),
+                    Err(_) => panic!("Player channel closed without sending results"),
+                },
+                recv(from_sv) -> r => match r {
+                    Ok(FromSupervisor::Quit) => {
+                        // Game quit requested
+                        debug!("Supervisor requested game quit");
 
-            match content {
-                ToGameContent::GameOver(results) => {
-                    player_results = results.into_iter().map(Some).collect();
-                },
-                ToGameContent::LeftGame => {
-                    debug!("Player left game before it was over");
-                    player_results[player_index] = Some(PlayerResult::Defeat);
-                },
-                ToGameContent::QuitBeforeLeave => {
-                    warn!("Client quit without leaving the game");
-                    player_results[player_index] = Some(PlayerResult::Defeat);
-                },
-                ToGameContent::UnexpectedConnectionClose => {
-                    warn!("Unexpected connection close");
-                    player_results[player_index] = Some(PlayerResult::Defeat);
-                },
-            };
+                        result_tx
+                            .send(GameResult {
+                                end_reason: GameEndReason::QuitRequest,
+                                player_results: Vec::new(),
+                            })
+                            .expect("Could not send results to the supervisor");
+
+                        unimplemented!(); // TODO
+                    },
+                    Err(_) => panic!("Supervisor channel closed unexpectedly"),
+                }
+            }
         }
 
         debug!("Game ready, results collected");
-
-        // debug!("Telling other clients to quit");
-
-        // use super::messaging::ToPlayer;
-        // for (i, c) in to_player_channels.iter_mut().enumerate() {
-        //     if i != player_index {
-        //         c.send(ToPlayer::Quit);
-        //     }
-        // }
 
         // Wait until the games are ready
         let mut result_players: Vec<Player> = Vec::new();
@@ -93,13 +125,13 @@ impl Game {
             }
         }
 
-        // Send game result to supervisor
-        // TODO: Actually fetch the result
+        // Send game result to the supervisor
         result_tx
             .send(GameResult {
+                end_reason: GameEndReason::Normal,
                 player_results: player_results.into_iter().map(Option::unwrap).collect(),
             })
-            .unwrap();
+            .expect("Could not send results to the supervisor");
 
         result_players
     }

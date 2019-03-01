@@ -9,7 +9,7 @@ pub use crate::sc2process::ProcessOptions;
 
 pub use self::request_limits::*;
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq)]
 pub struct Config {
     #[serde(default)]
     pub process: ProcessOptions,
@@ -23,7 +23,7 @@ impl Config {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq)]
 pub struct Matchmaking {
     pub mode: MatchmakingMode,
     /// Builtin AI difficulty, used with some modes
@@ -42,8 +42,8 @@ pub enum MatchmakingMode {
     Pairs,
     /// Singleplayer (allowed in singleplayer maps only)
     Singleplayer,
-    /// Uses controller endpoint to coordinate
-    Controller,
+    /// Uses remote controller endpoint to coordinate
+    RemoteController,
 }
 impl Default for MatchmakingMode {
     fn default() -> Self {
@@ -51,7 +51,7 @@ impl Default for MatchmakingMode {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq)]
 pub struct MatchConfig {
     #[serde(default)]
     pub game: GameConfig,
@@ -63,7 +63,7 @@ pub struct MatchConfig {
     pub record_results: RecordConfig,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct GameConfig {
     #[serde(default)]
     pub map_name: Option<String>,
@@ -89,13 +89,13 @@ impl Default for GameConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq)]
 pub struct TimeLimits {
     #[serde(default)]
     pub game_loops: Option<u64>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq)]
 pub struct RecordConfig {
     #[serde(default)]
     replay_path: Option<String>,

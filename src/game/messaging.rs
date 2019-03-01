@@ -1,8 +1,16 @@
 #![allow(dead_code)]
 
-use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
+use crossbeam::channel::{self, Receiver, Sender, TryRecvError};
 
 use crate::sc2::PlayerResult;
+
+/// Request from the supervisor
+pub enum FromSupervisor {
+    Quit,
+}
+
+/// Response to the supervisor
+pub enum ToSupervisor {}
 
 /// Create one receiver for the game, send connections to players,
 /// and corresponding two-way connections to players
@@ -10,9 +18,9 @@ pub fn create_channels(count: usize) -> (Receiver<ToGame>, Vec<ChannelToPlayer>,
     let mut to_player_channels = Vec::new();
     let mut to_game_channels = Vec::new();
 
-    let (tx_to_game, rx_game) = channel();
+    let (tx_to_game, rx_game) = channel::unbounded();
     for player_index in 0..count {
-        let (tx, rx) = channel();
+        let (tx, rx) = channel::unbounded();
 
         to_player_channels.push(ChannelToPlayer { tx });
 
@@ -48,7 +56,7 @@ impl ChannelToGame {
         match self.rx.try_recv() {
             Ok(msg) => Some(msg),
             Err(TryRecvError::Empty) => None,
-            Err(TryRecvError::Disconnected) => panic!(),
+            Err(TryRecvError::Disconnected) => panic!("Disconnected"),
         }
     }
 }
@@ -69,6 +77,8 @@ pub enum ToGameContent {
     LeftGame,
     /// SC2 reponded to `quit` request without the client leaving the game
     QuitBeforeLeave,
+    /// SC2 unexpectedly closed connection, usually user clicking the window close button
+    SC2UnexpectedConnectionClose,
     /// Client unexpectedly closed connection
     UnexpectedConnectionClose,
 }

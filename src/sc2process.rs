@@ -24,7 +24,7 @@ fn default_verbosity() -> bool {
 
 /// Options for SC2 process
 #[allow(missing_docs)]
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct ProcessOptions {
     #[serde(default)]
     pub fullscreen: bool,

@@ -6,11 +6,11 @@
 // Features
 #![feature(type_alias_enum_variants)]
 
+use crossbeam::channel::{self, TryRecvError};
 use log::{info, warn};
 use std::env::var;
 use std::fs::File;
 use std::io::prelude::*;
-use std::sync::mpsc::{channel, TryRecvError};
 use std::thread;
 
 use dotenv::dotenv;
@@ -24,11 +24,12 @@ mod sc2process;
 
 pub mod config;
 pub mod maps;
+pub mod remote_control;
 pub mod sc2;
 pub mod supervisor;
 
 use self::config::Config;
-use self::supervisor::Supervisor;
+use self::supervisor::{RemoteUpdateStatus, Supervisor};
 
 /// Load configuration
 /// Panics uses default if not successful
@@ -62,7 +63,12 @@ pub fn run_server(proxy_addr: String) {
 
     let config = load_config();
 
-    let (proxy_sender, proxy_receiver) = channel();
+    let (proxy_sender, proxy_receiver) = channel::unbounded();
+
+    let mut remote: Option<remote_control::Remote> = None;
+    if config.matchmaking.mode == self::config::MatchmakingMode::RemoteController {
+        remote = Some(remote_control::run_server("127.0.0.1:1234"));
+    }
 
     thread::spawn(move || {
         proxy::run(proxy_addr, proxy_sender);
@@ -80,15 +86,22 @@ pub fn run_server(proxy_addr: String) {
         }
 
         sv.update_playlist();
+
         sv.update_games();
 
-        thread::sleep(::std::time::Duration::new(1, 0));
-    }
-}
+        if let Some(ref mut r) = remote {
+            if sv.update_remote(r) == RemoteUpdateStatus::Quit {
+                sv.close();
+                break;
+            }
+        }
 
-#[cfg(test)]
-mod test {
-    #[ignore]
-    #[test]
-    fn test_new_process_pair() {}
+        thread::sleep(::std::time::Duration::from_millis(100));
+    }
+
+    info!("Quitting");
+
+    if let Some(r) = remote {
+        r.handle.join().unwrap();
+    }
 }
