@@ -7,14 +7,11 @@
 #![feature(type_alias_enum_variants)]
 
 use crossbeam::channel::{self, TryRecvError};
-use log::{info, warn};
+use log::{error, info, warn};
 use std::env::var;
 use std::fs::File;
 use std::io::prelude::*;
 use std::thread;
-
-use dotenv::dotenv;
-use pretty_env_logger;
 
 mod game;
 mod paths;
@@ -56,22 +53,27 @@ pub fn load_config() -> Config {
     }
 }
 
-/// Run a proxy server in `proxy_addr` using `config`
-pub fn run_server(proxy_addr: String) {
-    dotenv().ok();
-    pretty_env_logger::init();
+/// Run a proxy server, loading the config any available
+pub fn run_server() {
+    run_server_config(load_config())
+}
 
-    let config = load_config();
-
+/// Run a proxy server using `config`
+pub fn run_server_config(config: Config) {
     let (proxy_sender, proxy_receiver) = channel::unbounded();
 
-    let mut remote: Option<remote_control::Remote> = None;
-    if config.matchmaking.mode == self::config::MatchmakingMode::RemoteController {
-        remote = Some(remote_control::run_server("127.0.0.1:1234"));
-    }
+    let mut remote = if config.remote_controller.enabled {
+        Some(remote_control::run_server(&config.remote_controller.addr()))
+    } else if config.matchmaking.mode == self::config::MatchmakingMode::RemoteController {
+        error!("Remote controller disabled in config, but required for matchmaking");
+        return;
+    } else {
+        None
+    };
 
+    let addr = config.proxy.addr();
     thread::spawn(move || {
-        proxy::run(proxy_addr, proxy_sender);
+        proxy::run(&addr, proxy_sender);
     });
 
     let mut sv = Supervisor::new(config);

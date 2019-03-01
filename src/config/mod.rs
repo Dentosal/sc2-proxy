@@ -12,14 +12,60 @@ pub use self::request_limits::*;
 #[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq)]
 pub struct Config {
     #[serde(default)]
+    pub proxy: Proxy,
+    #[serde(default)]
     pub process: ProcessOptions,
+    #[serde(default)]
     pub matchmaking: Matchmaking,
     pub match_defaults: MatchConfig,
+    #[serde(default)]
+    pub remote_controller: RemoteController,
 }
 impl Config {
     /// New default config
     pub fn new() -> Self {
         Self { ..Default::default() }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct Proxy {
+    pub host: String,
+    pub port: u16,
+}
+impl Default for Proxy {
+    fn default() -> Self {
+        Self {
+            host: "127.0.0.1".to_owned(),
+            port: 8642,
+        }
+    }
+}
+impl Proxy {
+    pub fn addr(&self) -> String {
+        format!("{}:{}", self.host, self.port)
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct RemoteController {
+    pub enabled: bool,
+    pub host: String,
+    pub port: u16,
+}
+impl Default for RemoteController {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            host: "127.0.0.1".to_owned(),
+            port: 2468,
+        }
+    }
+}
+
+impl RemoteController {
+    pub fn addr(&self) -> String {
+        format!("{}:{}", self.host, self.port)
     }
 }
 

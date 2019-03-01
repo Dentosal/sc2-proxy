@@ -1,5 +1,11 @@
 use sc2_proxy::run_server;
 
+use dotenv::dotenv;
+use pretty_env_logger;
+
 fn main() {
-    run_server("127.0.0.1:8765".to_owned());
+    dotenv().ok();
+    pretty_env_logger::init();
+
+    run_server();
 }
