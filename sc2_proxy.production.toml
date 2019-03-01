@@ -1,0 +1,15 @@
+# Example production config
+# TODO: Actually provide a proper configuration here
+
+[matchmaking]
+mode = "RemoteController"
+
+[match_defaults.game]
+map_name = "AcolyteLE.SC2Map"
+realtime = false
+
+[match_defaults.request_limits]
+disable_cheats = true
+
+[match_defaults.record_results]
+end_score = true
