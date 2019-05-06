@@ -114,7 +114,7 @@ impl Supervisor {
     }
 
     /// Join to game from playlist
-    /// Íff game join fails, drops connection
+    /// Iff game join fails, drops connection
     #[must_use]
     fn playlist_join_game(&mut self, index: usize, req: RequestJoinGame) -> Option<()> {
         let (client, old_req) = self.playlist.remove(index);
